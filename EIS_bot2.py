@@ -7,6 +7,7 @@ from config import token
 import os
 from ftplib import FTP
 import datetime
+import zipfile
 
 
 def create_dir(directory_name):
@@ -38,7 +39,8 @@ def dir_choice(month_date):
 
 def get_from_ftp(eisdocno, month, month_date, directory):
 
-    create_dir(directory_name=f'Temp//{eisdocno}_{month}_{month_date}')
+    directory_name = f'Temp//{eisdocno}_{month}_{month_date}'
+    create_dir(directory_name)
 
     ftp_files = []
     ftp = FTP('ftp.zakupki.gov.ru')
@@ -46,8 +48,23 @@ def get_from_ftp(eisdocno, month, month_date, directory):
     ftp.set_pasv(True)
     ftp.cwd(f'fcs_regions//Tulskaja_obl//contracts//{directory}')
     ftp.dir(ftp_files.append)
+    month_date = month_date[6:] + month_date[3:5] + month_date[:2]
+
+    for file in ftp_files:
+        tokens = file.split()
+        file_name = tokens[8]
+        file_name_date = file_name.split('_')[3][:8]
+
+        if month_date == file_name_date:
+            with open(f'{directory_name}//{file_name}',
+                      'wb') as f:
+                ftp.retrbinary('RETR ' + file_name, f.write)
+            z = zipfile.ZipFile(f'{directory_name}//{file_name}', 'r')
+            for item in z.namelist():
+                if item.endswith('.xml') and eisdocno in item and 'contractProcedure' in item:
+                    z.extract(item, f'{directory_name}')
+
     ftp.close()
-    print(ftp_files)
 
 
 def spider(eisdocno):
