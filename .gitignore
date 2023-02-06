@@ -1,0 +1,7 @@
+Temp
+Temp//*
+.idea
+base.db
+config.py
+*.html
+sqlite3.*

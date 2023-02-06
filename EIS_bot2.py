@@ -67,6 +67,7 @@ def select_like(conn, column1, column2):
 def journal_update():
     conn = sql_connection()
     zips_in_base = selectz_distinct(conn)
+    zips_in_base = [x[0] for x in zips_in_base]
     conn_close(conn)
     ftp = FTP('ftp.zakupki.gov.ru')
     ftp.login('free', 'free')
@@ -78,23 +79,28 @@ def journal_update():
         tokens = file.split()
         file_name = tokens[8]
         if file_name not in zips_in_base and file_name not in ('currMonth', 'prevMonth'):
-
+            print(f'обрабатываю {file_name}', file_name not in zips_in_base)
             with open(f'Temp//{file_name}', 'wb') as f:
                 ftp.retrbinary('RETR ' + file_name, f.write)
             z = zipfile.ZipFile(f'Temp//{file_name}', 'r')
-            for item in z.namelist():
-                if item.endswith('.xml') and 'contractProcedure' in item:
-                    conn = sql_connection()
-                    entities = (file_name, item, datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S'))
-                    insert(conn, entities)
-                    conn_close(conn)
+            conn = sql_connection()
+            if z.namelist():
+                for item in z.namelist():
+                    if item.endswith('.xml') and 'contractProcedure' in item:
+                        entities = (file_name, item, datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S'))
+                        insert(conn, entities)
+            else:
+                entities = (file_name, None, datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S'))
+                insert(conn, entities)
+            conn_close(conn)
             z.close()
             os.unlink(f'Temp//{file_name}')
     ftp.close()
 
 
 def journal_update_start():
-    schedule.every().day.at("12:20").do(journal_update)
+    schedule.every().day.at("08:00").do(journal_update)
+    schedule.every().day.at("20:00").do(journal_update)
     while True:
         try:
             schedule.run_pending()
@@ -127,17 +133,24 @@ def dir_choice(month_date):
         if date_now.month - month_date.month == 0:
             directory = 'currMonth'
         elif date_now.month - month_date.month == 1:
-            directory = 'prevMonth'
+            if date_now.day == 1:
+                directory = 'currMonth'
+            else:
+                directory = 'prevMonth'
         else:
             directory = ''
     elif date_now.year - month_date.year == 1:
-        if date_now.month == '01' and month_date.month == '12':
+        # print('date_now.month', date_now.month)
+        # print('month_date.month', month_date.month)
+        if date_now.month == 1 and month_date.month == 12:
+            # print('alert1')
             directory = 'prevMonth'
         else:
+            # print('alert2')
             directory = ''
     else:
         directory = ''
-
+    # print('directory', directory)
     return directory
 
 
@@ -316,13 +329,10 @@ if __name__ == '__main__':
                             file_to_send.close()
                         # clean_dir(directory_name)
                     else:
-                        bot.edit_message_text(text=f'Поиск завершен',
+                        bot.edit_message_text(text=f'Что-то пошло не так. Возможно указанный реестровый номер некорректен. '
+                                               'Пожалуйста попробуйте еще раз.'
+                                                   '👇 Введите реестровый номер сведений о контракте 👇 и нажите "Ввод"',
                                               chat_id=chat_id, message_id=message_id)
-                        bot.send_message(chat_id=chat_id,
-                                         text='Что-то пошло не так. Возможно указанный реестровый номер некорректен. '
-                                               'Пожалуйста попробуйте еще раз.', reply_to_message_id=message_id-1)
-                        bot.send_message(chat_id=chat_id,
-                                         text='👇 Введите реестровый номер сведений о контракте 👇 и нажите "Ввод"', reply_to_message_id=message_id-1)
                     del queue[0]
             time.sleep(5)
 
@@ -369,7 +379,7 @@ if __name__ == '__main__':
         if call.data.count('_') == 0:
             for search in end_search:
                 search_chat_id, search_msg_id = search[0], search[1]
-                if call.message.chat.id == search_chat_id: #and call.message.id != msg_id
+                if call.message.chat.id == search_chat_id:
                     bot.edit_message_text(text=f'Поиск завершен',
                                   chat_id=search_chat_id, message_id=search_msg_id)
                     search[0], search[1] = 0, 0
